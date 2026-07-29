@@ -23,7 +23,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: uv sync --frozen --all-groups
@@ -46,7 +46,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: AutoAlpha/uv.lock
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: uv sync --frozen --all-groups
