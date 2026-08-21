@@ -37,6 +37,15 @@ def main() -> None:
     parser.add_argument("--end", default=None, help="end date YYYY-MM-DD (optional)")
     parser.add_argument("--retries", type=int, default=2)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help=(
+            "replace an existing daily panel under --root; without this flag, ingestion "
+            "refuses to run when a panel already exists so a smaller/different universe "
+            "cannot silently drop previously ingested tickers or date ranges"
+        ),
+    )
     args = parser.parse_args()
     result = run_yahoo_ingestion(
         root=args.root.expanduser().resolve(),
@@ -45,6 +54,7 @@ def main() -> None:
         end=args.end,
         retries=args.retries,
         workers=args.workers,
+        overwrite=args.overwrite,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if not result["ok"]:

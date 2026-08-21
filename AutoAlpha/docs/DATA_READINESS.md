@@ -71,6 +71,14 @@ existing tooling consumes (`processed/daily_panel/trade_year=*`, `_metadata.json
 `data/downloads/yahoo_eod/`) and can be inspected unchanged via
 `uv run autoalpha inspect-data <root>/processed/daily_panel` or the data-center workspace report.
 
+Ingestion never merges into an existing panel. If `<root>/processed/daily_panel` already exists,
+the command refuses to run (and `run_yahoo_ingestion` raises `FileExistsError`) rather than
+silently replacing it — re-running with a smaller or different universe would otherwise drop
+tickers or date ranges from a prior run without warning. Pass `--overwrite` (or
+`overwrite=True` when calling `run_yahoo_ingestion` directly) to replace the existing panel
+deliberately; the replacement still uses the same atomic staging/backup swap as a fresh run, so a
+failed overwrite leaves the previous panel intact.
+
 **Capability ceiling: `RESEARCH_READY` only.** Yahoo Finance provides no point-in-time listing,
 delisting, suspension, price-limit, or free-float history, so these panels must never be used for
 proxy-execution backtests, paper trading, or production admission; panel metadata sets

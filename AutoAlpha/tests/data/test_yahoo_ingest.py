@@ -166,6 +166,53 @@ def test_total_failure_raises(tmp_path: Path) -> None:
         )
 
 
+def test_rerun_without_overwrite_refuses_and_leaves_panel_intact(tmp_path: Path) -> None:
+    root = tmp_path / "guarded"
+    run_yahoo_ingestion(root=root, universe=["AAPL"], fetcher=yahoo_fixture_fetcher())
+    original_metadata = (root / "processed" / "daily_panel" / "_metadata.json").read_text(
+        encoding="utf-8"
+    )
+    with pytest.raises(FileExistsError, match="already exists"):
+        run_yahoo_ingestion(
+            root=root, universe=["AAPL", "LSE:SHEL.L"], fetcher=yahoo_fixture_fetcher()
+        )
+    assert inspect_current_panel(root / "processed" / "daily_panel").rows == 10
+    assert (root / "processed" / "daily_panel" / "_metadata.json").read_text(
+        encoding="utf-8"
+    ) == original_metadata
+
+
+def test_overwrite_flag_replaces_existing_panel(tmp_path: Path) -> None:
+    root = tmp_path / "overwritten"
+    run_yahoo_ingestion(root=root, universe=["AAPL"], fetcher=yahoo_fixture_fetcher())
+    result = run_yahoo_ingestion(
+        root=root,
+        universe=["AAPL", "LSE:SHEL.L"],
+        fetcher=yahoo_fixture_fetcher(),
+        overwrite=True,
+    )
+    assert result["ok"]
+    report = inspect_data_workspace(root)
+    assert report.symbols == 2
+
+
+def test_lineage_write_failure_does_not_swap_panel_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoalpha.data.sources.yahoo_source as yahoo_source
+
+    def _boom(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        raise OSError("disk full")
+
+    monkeypatch.setattr(yahoo_source, "_write_raw_frames", _boom)
+    root = tmp_path / "lineage-failure"
+    with pytest.raises(OSError, match="disk full"):
+        yahoo_source.run_yahoo_ingestion(
+            root=root, universe=["AAPL"], fetcher=yahoo_fixture_fetcher()
+        )
+    assert not (root / "processed" / "daily_panel").exists()
+
+
 def test_universe_roundtrip_into_metadata(tmp_path: Path) -> None:
     root = tmp_path / "universe-meta"
     universe = ["AAPL", "LSE:SHEL.L"]

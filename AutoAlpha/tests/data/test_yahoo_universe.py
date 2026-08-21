@@ -31,6 +31,14 @@ def test_invalid_entries_rejected(bad: str) -> None:
         parse_yahoo_universe([bad])
 
 
+@pytest.mark.parametrize(
+    "bad", ["../etc/passwd", "AAPL/../MSFT", "a/b", "a\\b", "..", "LSE:../AAPL"]
+)
+def test_path_traversal_tickers_rejected(bad: str) -> None:
+    with pytest.raises(ValueError):
+        parse_yahoo_universe([bad])
+
+
 def test_empty_universe_rejected() -> None:
     with pytest.raises(ValueError, match="empty"):
         parse_yahoo_universe([])

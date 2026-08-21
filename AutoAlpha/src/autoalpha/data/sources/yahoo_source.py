@@ -134,6 +134,10 @@ def parse_yahoo_universe(specs: list[str] | tuple[str, ...]) -> tuple[YahooUnive
             exchange, ticker = None, text
         if any(character.isspace() for character in ticker):
             raise ValueError(f"Invalid ticker {raw!r}; tickers must not contain whitespace")
+        if "/" in ticker or "\\" in ticker or ".." in ticker:
+            raise ValueError(
+                f"Invalid ticker {raw!r}; tickers must not contain path separators or '..'"
+            )
         if ticker not in entries:
             entries[ticker] = YahooUniverseEntry(ticker=ticker, exchange=exchange)
     if not entries:
@@ -206,6 +210,7 @@ def run_yahoo_ingestion(
     retries: int = 2,
     retry_backoff_seconds: float = 1.0,
     workers: int = 4,
+    overwrite: bool = False,
 ) -> dict[str, Any]:
     """Ingest a configured ticker universe into the shared daily-panel layout.
 
@@ -218,9 +223,24 @@ def run_yahoo_ingestion(
         data/downloads/yahoo_eod/<TICKER>.parquet  (raw per-ticker lineage)
         data/downloads/yahoo_eod/_manifest.json
 
-    Returns a summary dict; raises ``RuntimeError`` when no ticker produced data.
+    Fresh runs (no existing panel under ``root``) always succeed. When a panel
+    already exists at ``root``, the call refuses to replace it unless
+    ``overwrite=True`` is passed explicitly, so re-running the ingestion
+    command with a different or smaller universe cannot silently drop
+    previously ingested tickers or date ranges.
+
+    Returns a summary dict; raises ``RuntimeError`` when no ticker produced
+    data, or ``FileExistsError`` when a panel already exists and
+    ``overwrite`` is not set.
     """
     resolved_root = root.expanduser().resolve()
+    panel_path = _panel_path(resolved_root)
+    if panel_path.exists() and not overwrite:
+        raise FileExistsError(
+            f"Yahoo daily panel already exists at {panel_path}; re-running ingestion would "
+            "silently drop tickers/date ranges from the existing panel. Pass overwrite=True "
+            "(or --overwrite on the CLI) to replace it deliberately."
+        )
     entries = parse_yahoo_universe(universe)
     fetch = fetcher or default_yahoo_fetcher
     tickers = tuple(entry.ticker for entry in entries)
@@ -392,6 +412,10 @@ def _build_panel_frame(frames: FetchResult) -> pd.DataFrame:
     return panel.sort_values(["trade_date", "ts_code"]).reset_index(drop=True)
 
 
+def _panel_path(root: Path) -> Path:
+    return root / "processed" / "daily_panel"
+
+
 def _write_workspace(
     root: Path,
     panel: pd.DataFrame,
@@ -401,7 +425,7 @@ def _write_workspace(
     start: str | None,
     end: str | None,
 ) -> dict[str, Any]:
-    panel_path = root / "processed" / "daily_panel"
+    panel_path = _panel_path(root)
     catalog_path = root / "catalog"
     download_path = root / "data" / "downloads" / "yahoo_eod"
     staging = panel_path.with_name(f".{panel_path.name}.staging")
@@ -453,11 +477,11 @@ def _write_workspace(
         )
         _write_quality_report(catalog_path, panel, summary)
         _write_catalog(catalog_path, panel)
+        _write_raw_frames(download_path, frames, entries, start=start, end=end)
         _atomic_replace(staging, panel_path)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
-    _write_raw_frames(download_path, frames, entries, start=start, end=end)
     return summary
 
 
