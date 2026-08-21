@@ -841,9 +841,7 @@ def _write_workspace(
         (staging / "_metadata.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
-        _write_quality_report(
-            catalog_path, panel, summary, dropped_vendor_rows=dropped_vendor_rows
-        )
+        _write_quality_report(catalog_path, panel, summary, dropped_vendor_rows=dropped_vendor_rows)
         _write_catalog(catalog_path, panel)
         _atomic_replace(staging, panel_path)
     except Exception:

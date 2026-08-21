@@ -186,17 +186,17 @@ def test_all_nan_batch_pull_is_retried_per_symbol(tmp_path: Path) -> None:
         frames = good(tickers, start, end)
         if len(tickers) > 1 and "SHEL.L" in frames:
             shel = frames["SHEL.L"]
-            frames["SHEL.L"] = shel.assign(
-                **{column: float("nan") for column in shel.columns}
-            )
+            frames["SHEL.L"] = shel.assign(**{column: float("nan") for column in shel.columns})
         return frames
 
     def per_symbol_ok(tickers, start, end):  # noqa: ANN001
         return good(tickers, start, end)
 
     def fetcher(tickers, start, end):  # noqa: ANN001
-        return nan_for_shel_batch(tickers, start, end) if len(tickers) > 1 else per_symbol_ok(
-            tickers, start, end
+        return (
+            nan_for_shel_batch(tickers, start, end)
+            if len(tickers) > 1
+            else per_symbol_ok(tickers, start, end)
         )
 
     result = run_yahoo_ingestion(
@@ -279,9 +279,7 @@ def test_impossible_ohlc_row_is_excluded_from_panel_but_kept_in_raw_store(
 def test_universe_roundtrip_into_metadata(tmp_path: Path) -> None:
     root = tmp_path / "universe-meta"
     universe = ["AAPL", "LSE:SHEL.L"]
-    run_yahoo_ingestion(
-        root=root, universe=universe, fetcher=yahoo_fixture_fetcher(), **UNPACED
-    )
+    run_yahoo_ingestion(root=root, universe=universe, fetcher=yahoo_fixture_fetcher(), **UNPACED)
     metadata = json.loads(
         (root / "processed" / "daily_panel" / "_metadata.json").read_text(encoding="utf-8")
     )
