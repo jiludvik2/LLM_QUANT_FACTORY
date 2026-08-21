@@ -81,8 +81,11 @@ YAHOO_COLUMN_NOTES: tuple[tuple[str, str], ...] = (
     ("history_observations", "Derived: 1-based running count of available rows per ticker."),
     ("is_valid_ohlc", "Derived: positive and internally consistent OHLC relationship."),
     ("has_activity", "Derived: positive volume (and therefore positive approximated amount)."),
-    ("is_tradable_observation", "Derived: is_valid_ohlc AND has_activity. Yahoo cannot confirm "
-        "the security actually traded or was buyable that session."),
+    (
+        "is_tradable_observation",
+        "Derived: is_valid_ohlc AND has_activity. Yahoo cannot confirm "
+        "the security actually traded or was buyable that session.",
+    ),
 )
 
 KNOWN_LIMITATIONS: tuple[str, ...] = (
@@ -245,7 +248,12 @@ def run_yahoo_ingestion(
     fetch = fetcher or default_yahoo_fetcher
     tickers = tuple(entry.ticker for entry in entries)
     frames, failures = _fetch_all(
-        fetch, tickers, start=start, end=end, retries=retries, backoff=retry_backoff_seconds,
+        fetch,
+        tickers,
+        start=start,
+        end=end,
+        retries=retries,
+        backoff=retry_backoff_seconds,
         workers=workers,
     )
     if not frames:
@@ -485,9 +493,7 @@ def _write_workspace(
     return summary
 
 
-def _write_quality_report(
-    catalog_path: Path, panel: pd.DataFrame, summary: dict[str, Any]
-) -> None:
+def _write_quality_report(catalog_path: Path, panel: pd.DataFrame, summary: dict[str, Any]) -> None:
     keys = ["ts_code", "trade_date"]
     null_keys = int(panel[keys].isna().any(axis=1).sum())
     duplicate_keys = int(panel.duplicated(keys).sum())
@@ -499,9 +505,7 @@ def _write_quality_report(
     return_difference = (
         (panel["close"] / panel["pre_close"] - 1.0) - panel["pct_chg"] / 100.0
     ).abs()
-    mismatch = (
-        panel["pre_close"].notna() & (panel["pre_close"] != 0) & (return_difference > 0.0005)
-    )
+    mismatch = panel["pre_close"].notna() & (panel["pre_close"] != 0) & (return_difference > 0.0005)
     checks = {
         "duplicate_keys": duplicate_keys,
         "null_keys": null_keys,
