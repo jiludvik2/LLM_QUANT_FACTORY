@@ -574,3 +574,20 @@ curl -fsS http://127.0.0.1:8788/api/platform/doctor
 - [因子同质化控制](AutoAlpha/docs/FACTOR_HOMOGENEITY_CONTROL.md)
 - [向量回测引擎](AutoAlpha/docs/VECTOR_BACKTEST_ENGINE.md)
 - [公开研究样例](examples/public_research_snapshot/README.md)
+
+## Market data sources
+
+Market-data ingestion is pluggable via `AutoAlpha/src/autoalpha/data/sources/` (`get_source` /
+`available_sources`). Built-ins: `tushare` (delegates to the existing `mf-data` pipeline) and
+`yahoo` (self-contained yfinance adapter; research-only, no PIT claims — see
+`AutoAlpha/docs/DATA_READINESS.md`). Ingest Yahoo data with
+`uv run python -m autoalpha.data.sources.yahoo_cli --root <data-root> --universe TICKER...`
+(optional dependency group: `uv sync --extra yahoo`). Register new vendors as a descriptor module;
+do not hard-wire consumers to a source.
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.

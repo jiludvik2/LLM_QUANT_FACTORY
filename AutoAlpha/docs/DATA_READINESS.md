@@ -44,6 +44,44 @@ The platform therefore does not label the current panel as institutionally point
 must call `require_institutional_pit()` before production admission. Missing fields must arrive from
 versioned source tables; they must not be synthesized from present-day state or filled with defaults.
 
+## Yahoo Finance research source (US / UK / EU)
+
+Besides the Tushare/A-share pipeline, the platform registers a second pluggable market-data
+source: `yahoo` (Yahoo Finance daily OHLCV). Sources are resolved through
+`autoalpha.data.sources` (`get_source` / `available_sources`); adding a future vendor such as
+EODHD means registering one new descriptor module without touching consumer code.
+
+Ingestion command (requires the optional dependency `pip install 'autoalpha-research[yahoo]'`):
+
+```bash
+cd AutoAlpha
+uv run python -m autoalpha.data.sources.yahoo_cli \
+    --root ../data-yahoo \
+    --universe AAPL --universe MSFT --universe XOM --universe KO --universe JPM \
+    --universe LSE:SHEL.L --universe LSE:AZN.L --universe LSE:HSBA.L --universe LSE:BP.L \
+    --universe LSE:ULVR.L \
+    --universe ASML.AS --universe SAP.DE --universe MC.PA --universe NESN.SW --universe ADYEN.AS \
+    --start 2020-01-01
+```
+
+Universe entries are plain Yahoo tickers or `EXCHANGE:TICKER` scoped entries; no full-market
+index scraping is performed. The command writes the same partitioned-panel workspace layout the
+existing tooling consumes (`processed/daily_panel/trade_year=*`, `_metadata.json`,
+`catalog/data_quality.json`, `catalog/daily_catalog.csv`, raw per-ticker lineage under
+`data/downloads/yahoo_eod/`) and can be inspected unchanged via
+`uv run autoalpha inspect-data <root>/processed/daily_panel` or the data-center workspace report.
+
+**Capability ceiling: `RESEARCH_READY` only.** Yahoo Finance provides no point-in-time listing,
+delisting, suspension, price-limit, or free-float history, so these panels must never be used for
+proxy-execution backtests, paper trading, or production admission; panel metadata sets
+`capital_ledger_ready=false`, `capital_ledger_proxy_ready=false`, and an explicit non-PIT marker,
+and the standard capability matrix reports strict-PIT modules as `PRODUCTION_BLOCKED`. Column
+semantics are documented in `YAHOO_COLUMN_NOTES` (`autoalpha.data.sources.yahoo_source`). Fields
+without a Yahoo equivalent (`name`, exchanged `amount`) are approximated or substituted with an
+explicit note rather than bent to fit A-share assumptions: identifiers stay Yahoo tickers,
+volume stays shares (no board lots), amounts are close × volume in local listing currency, and
+LSE prices remain in pence. Cross-currency comparison requires explicit normalization.
+
 ## Required next ingestion
 
 Ingest security master revisions, exchange trading status and price limits, index/industry history,
