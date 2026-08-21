@@ -7,6 +7,10 @@ Usage::
 
     uv run python -m autoalpha.data.sources.yahoo_cli \\
         --root <data-root> --universe AAPL --universe LSE:SHEL.L --start 2020-01-01
+
+Ingestion is resumable and incremental: re-running only fetches each ticker's
+missing date range and regenerates the processed panel from the complete raw
+store, so previously ingested history is preserved.
 """
 
 from __future__ import annotations
@@ -15,14 +19,18 @@ import argparse
 import json
 from pathlib import Path
 
-from autoalpha.data.sources.yahoo_source import run_yahoo_ingestion
+from autoalpha.data.sources.yahoo_source import (
+    DEFAULT_REQUESTS_PER_MINUTE,
+    run_yahoo_ingestion,
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Ingest a Yahoo Finance EOD ticker universe (US/UK/EU) into the shared daily-panel "
-            "layout. Research-grade only: capability ceiling RESEARCH_READY, no PIT claims."
+            "Resumably ingest a Yahoo Finance EOD ticker universe (US/UK/EU) into the shared "
+            "daily-panel layout. Research-grade only: capability ceiling RESEARCH_READY, no PIT "
+            "claims. Re-runs fetch only missing dates and never drop ingested history."
         )
     )
     parser.add_argument("--root", type=Path, required=True, help="data workspace root directory")
@@ -38,13 +46,10 @@ def main() -> None:
     parser.add_argument("--retries", type=int, default=2)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help=(
-            "replace an existing daily panel under --root; without this flag, ingestion "
-            "refuses to run when a panel already exists so a smaller/different universe "
-            "cannot silently drop previously ingested tickers or date ranges"
-        ),
+        "--requests-per-minute",
+        type=int,
+        default=DEFAULT_REQUESTS_PER_MINUTE,
+        help="outbound request pacing; 0 disables pacing",
     )
     args = parser.parse_args()
     result = run_yahoo_ingestion(
@@ -54,7 +59,7 @@ def main() -> None:
         end=args.end,
         retries=args.retries,
         workers=args.workers,
-        overwrite=args.overwrite,
+        requests_per_minute=args.requests_per_minute,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if not result["ok"]:

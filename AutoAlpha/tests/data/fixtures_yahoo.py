@@ -41,9 +41,9 @@ def _frame(
     )
 
 
-def yahoo_fixture_frames(periods: int = 10) -> dict[str, pd.DataFrame]:
+def yahoo_fixture_frames(periods: int = 10, start: str = "2024-01-02") -> dict[str, pd.DataFrame]:
     """Three tickers spanning US, LSE (pence), and EU (EUR) listings."""
-    sessions = _sessions("2024-01-02", periods)
+    sessions = _sessions(start, periods)
     return {
         "AAPL": _frame(sessions, base_price=185.0, drift=0.002),
         "SHEL.L": _frame(sessions, base_price=2850.0, drift=-0.001),
@@ -51,21 +51,37 @@ def yahoo_fixture_frames(periods: int = 10) -> dict[str, pd.DataFrame]:
     }
 
 
-def yahoo_fixture_fetcher(periods: int = 10) -> object:
+def yahoo_fixture_fetcher(periods: int = 10, start: str = "2024-01-02") -> object:
     """A fetcher callable with the production signature but no network."""
 
-    def fetch(tickers, start, end):  # noqa: ANN001 - test double
-        frames = yahoo_fixture_frames(periods)
+    def fetch(tickers, call_start, call_end):  # noqa: ANN001 - test double
+        frames = yahoo_fixture_frames(periods, start)
         selected: dict[str, pd.DataFrame] = {}
         for ticker in tickers:
             if ticker in frames:
                 frame = frames[ticker]
-                if start:
-                    frame = frame[frame.index >= pd.Timestamp(start)]
-                if end:
-                    frame = frame[frame.index < pd.Timestamp(end)]
+                if call_start:
+                    frame = frame[frame.index >= pd.Timestamp(call_start)]
+                if call_end:
+                    frame = frame[frame.index < pd.Timestamp(call_end)]
                 if not frame.empty:
                     selected[ticker] = frame
         return selected
 
     return fetch
+
+
+class RecordingFetcher:
+    """Wrap a fetcher and record every call for resume-behavior assertions."""
+
+    def __init__(self, inner) -> None:  # noqa: ANN001 - test double
+        self.inner = inner
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(self, tickers, start, end):  # noqa: ANN001 - test double
+        self.calls.append({"tickers": tuple(tickers), "start": start, "end": end})
+        return self.inner(tickers, start, end)
+
+    @property
+    def requested_starts(self) -> set[str | None]:
+        return {call["start"] for call in self.calls}  # type: ignore[arg-type]

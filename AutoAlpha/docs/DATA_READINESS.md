@@ -71,13 +71,14 @@ existing tooling consumes (`processed/daily_panel/trade_year=*`, `_metadata.json
 `data/downloads/yahoo_eod/`) and can be inspected unchanged via
 `uv run autoalpha inspect-data <root>/processed/daily_panel` or the data-center workspace report.
 
-Ingestion never merges into an existing panel. If `<root>/processed/daily_panel` already exists,
-the command refuses to run (and `run_yahoo_ingestion` raises `FileExistsError`) rather than
-silently replacing it — re-running with a smaller or different universe would otherwise drop
-tickers or date ranges from a prior run without warning. Pass `--overwrite` (or
-`overwrite=True` when calling `run_yahoo_ingestion` directly) to replace the existing panel
-deliberately; the replacement still uses the same atomic staging/backup swap as a fresh run, so a
-failed overwrite leaves the previous panel intact.
+Ingestion is resumable and incremental, mirroring the operational shape of the Tushare sync: a
+raw download store under `data/downloads/yahoo_eod/` keeps one vendor-shaped parquet file per
+ticker; durable state in `data/state/yahoo_eod.json` records each ticker's covered date range and
+recent failures. Re-running the command only fetches each ticker's missing dates (paced and
+bounded-retried) and then regenerates the processed panel from the complete raw store, so already-
+fetched history is never refetched, rebuilt, or replaced - growing a universe or catching up a
+schedule accumulates instead of overwriting. The processed panel is a pure derivative of the raw
+store, so no destructive step remains and no overwrite flag exists.
 
 **Capability ceiling: `RESEARCH_READY` only.** Yahoo Finance provides no point-in-time listing,
 delisting, suspension, price-limit, or free-float history, so these panels must never be used for
