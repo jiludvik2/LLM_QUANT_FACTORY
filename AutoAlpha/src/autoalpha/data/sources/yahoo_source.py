@@ -267,6 +267,8 @@ class YahooRawStore:
     def ensure_dirs(self) -> None:
         self.download_path.mkdir(parents=True, exist_ok=True)
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        for orphan in self.download_path.glob("*.parquet.tmp"):
+            orphan.unlink(missing_ok=True)
 
     def load_state(self) -> dict[str, Any]:
         try:
@@ -294,7 +296,7 @@ class YahooRawStore:
     def write_raw(self, ticker: str, frame: pd.DataFrame) -> None:
         self.ensure_dirs()
         path = self.download_path / f"{ticker}.parquet"
-        temporary = path.with_suffix(".tmp.parquet")
+        temporary = path.with_suffix(path.suffix + ".tmp")
         frame.to_parquet(temporary, index=True)
         temporary.replace(path)
 

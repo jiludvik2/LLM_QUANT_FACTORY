@@ -339,6 +339,31 @@ def test_state_file_tracks_coverage_for_resume(tmp_path: Path) -> None:
     assert state["source_id"] == "yahoo"
     assert state["symbols"]["AAPL"]["first_date"] == "2024-01-02"
     assert state["symbols"]["AAPL"]["last_date"] == "2024-01-15"
+
+
+def test_orphaned_temp_download_does_not_leak_into_panel_or_state(tmp_path: Path) -> None:
+    root = tmp_path / "crash-recovery"
+    download_dir = root / "data" / "downloads" / "yahoo_eod"
+    download_dir.mkdir(parents=True)
+    # Simulate a crash between the temp-file write and the atomic rename in
+    # YahooRawStore.write_raw: a stray temp file left in the download store.
+    (download_dir / "AAPL.parquet.tmp").write_bytes(b"not a real parquet file")
+
+    result = run_yahoo_ingestion(
+        root=root,
+        universe=["AAPL"],
+        end="2024-12-31",
+        fetcher=yahoo_fixture_fetcher(periods=5),
+        **UNPACED,
+    )
+    assert result["ok"], result["failed_tickers"]
+
+    # The orphaned temp file must not survive as a phantom ticker anywhere.
+    assert not (download_dir / "AAPL.parquet.tmp").exists()
+    frame = pd.read_parquet(root / "processed" / "daily_panel")
+    assert set(frame["ts_code"]) == {"AAPL"}
+    state = json.loads((root / "data" / "state" / "yahoo_eod.json").read_text(encoding="utf-8"))
+    assert set(state["symbols"]) == {"AAPL"}
     assert state["failed"] == {}
 
 
