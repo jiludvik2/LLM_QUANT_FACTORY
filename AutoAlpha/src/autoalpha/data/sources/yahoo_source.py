@@ -120,13 +120,10 @@ KNOWN_LIMITATIONS: tuple[str, ...] = (
     "tickers are in USD and many EU tickers in EUR. Cross-sectional price-level and amount "
     "comparisons mix currencies unless explicitly normalized.",
     "'amount' is an approximated notional (close * volume), not an exchanged value.",
-    (
-        "Rows with missing OHLC or volume are dropped; the gap cannot be attributed to suspension, "
-        "holiday, or data error.",
-    ) + (
-        "Rows with impossible OHLC geometry (vendor anomalies) are excluded from the processed "
-        "panel, preserved in the raw store, and counted under 'unusable_vendor_rows_dropped'.",
-    )
+    "Rows with missing OHLC or volume are dropped; the gap cannot be attributed to suspension, "
+    "holiday, or data error.",
+    "Rows with impossible OHLC geometry (vendor anomalies) are excluded from the processed "
+    "panel, preserved in the raw store, and counted under 'unusable_vendor_rows_dropped'.",
 )
 
 

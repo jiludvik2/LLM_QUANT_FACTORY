@@ -106,6 +106,7 @@ def test_metadata_declares_honest_capability_ceiling(ingestion_root: Path) -> No
     assert metadata["volume_unit"] == "shares"
     assert metadata["currency_policy"].startswith("MIXED_LOCAL_CURRENCY")
     assert metadata["known_limitations"]
+    assert all(isinstance(note, str) for note in metadata["known_limitations"])
 
 
 def test_panel_column_semantics(ingestion_root: Path) -> None:
