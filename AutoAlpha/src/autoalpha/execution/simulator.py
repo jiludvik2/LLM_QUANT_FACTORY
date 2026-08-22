@@ -7,7 +7,12 @@ from enum import StrEnum
 import numpy as np
 import pandas as pd
 
+from autoalpha.backtest.conventions import MarketConventions, resolve_optional
 from autoalpha.backtest.costs import ChinaAExecutionCosts, Side
+
+# Legacy hard-coded CN A-share board lot; kept as the Order default so old
+# callers and stored evidence stay byte-for-byte compatible.
+LEGACY_DEFAULT_ORDER_LOT = 100
 
 
 class ExecutionStyle(StrEnum):
@@ -69,9 +74,23 @@ class ExecutionSimulator:
         self,
         impact: MarketImpactModel | None = None,
         fees: ChinaAExecutionCosts | None = None,
+        conventions: MarketConventions | str | None = None,
     ) -> None:
         self.impact = impact or MarketImpactModel()
         self.fees = fees or ChinaAExecutionCosts()
+        self.conventions: MarketConventions | None = (
+            resolve_optional(conventions) if isinstance(conventions, str) else conventions
+        )
+
+    def _effective_lot_size(self, order: Order) -> int:
+        """Lot size governing ``order`` under the configured conventions.
+
+        An order left at the legacy default lot follows the conventions input
+        (when provided); an explicitly set order lot is respected verbatim.
+        """
+        if self.conventions is not None and order.lot_size == LEGACY_DEFAULT_ORDER_LOT:
+            return self.conventions.lot_size
+        return order.lot_size
 
     def execute(
         self,
@@ -82,9 +101,13 @@ class ExecutionSimulator:
         daily_volatility: float,
         alpha_decay_bps: float = 0.0,
     ) -> ExecutionReport:
-        _validate_order_and_market(order, market_slices)
+        _validate_order_and_market(order, market_slices, self._effective_lot_size(order))
         weights = _schedule_weights(order.style, market_slices)
         remaining = order.quantity
+        lot_size = self._effective_lot_size(order)
+        # Dated fee schedules are resolved per fill timestamp; legacy
+        # hard-coded costs keep their previous (undated) behavior.
+        fee_trade_dates = bool(self.fees.historical_fee_schedules)
         records: list[dict[str, object]] = []
         spread_cost = 0.0
         impact_cost = 0.0
@@ -92,16 +115,16 @@ class ExecutionSimulator:
         gross_notional = 0.0
 
         for position, (timestamp, row) in enumerate(market_slices.iterrows()):
-            if remaining < order.lot_size or not bool(row["can_trade"]):
+            if remaining < lot_size or not bool(row["can_trade"]):
                 continue
             if order.style is ExecutionStyle.POV:
                 desired = float(row["volume"]) * order.maximum_participation
             else:
                 if weights[position] <= 0:
                     continue
-                desired = max(order.lot_size, order.quantity * weights[position])
+                desired = max(lot_size, order.quantity * weights[position])
             slice_limit = float(row["volume"]) * order.maximum_participation
-            quantity = _round_lot(min(remaining, desired, slice_limit), order.lot_size)
+            quantity = _round_lot(min(remaining, desired, slice_limit), lot_size)
             if quantity <= 0:
                 continue
             market_price = float(row["price"])
@@ -110,7 +133,8 @@ class ExecutionSimulator:
             direction = 1.0 if order.side == "BUY" else -1.0
             fill_price = market_price * (1 + direction * total_move_bps / 10_000)
             notional = quantity * fill_price
-            fees = self.fees.fees(order.side, notional)
+            trade_date = timestamp if fee_trade_dates else None
+            fees = self.fees.fees(order.side, notional, trade_date)
             slice_spread = quantity * market_price * self.impact.half_spread_bps / 10_000
             slice_impact = quantity * market_price * impact_bps / 10_000
             records.append(
@@ -166,8 +190,11 @@ def _round_lot(quantity: float, lot_size: int) -> int:
     return int(max(0, math.floor(quantity / lot_size) * lot_size))
 
 
-def _validate_order_and_market(order: Order, market: pd.DataFrame) -> None:
-    if order.quantity <= 0 or order.quantity % order.lot_size:
+def _validate_order_and_market(
+    order: Order, market: pd.DataFrame, lot_size: int | None = None
+) -> None:
+    effective_lot = lot_size if lot_size is not None else order.lot_size
+    if order.quantity <= 0 or order.quantity % effective_lot:
         raise ValueError("Order quantity must be a positive integer-lot quantity")
     if not 0 < order.maximum_participation <= 1:
         raise ValueError("maximum_participation must be in (0, 1]")

@@ -7,6 +7,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
+from autoalpha.backtest.conventions import DEFAULT_MARKET, resolve_optional
 from autoalpha.backtest.target_book import rebalance_mask, select_target_positions
 
 RebalanceSchedule = Literal[
@@ -32,6 +33,7 @@ class AshareVectorConfig:
     use_historical_fee_schedule: bool = True
     cost_stress_multiplier: float = 2.0
     trading_days_per_year: int = 245
+    market: str = DEFAULT_MARKET
 
     def __post_init__(self) -> None:
         if self.initial_cash_cny <= 0 or not 0 < self.gross_exposure <= 1:
@@ -221,10 +223,19 @@ class AshareVectorBacktester:
         transfer_bps = self.config.transfer_fee_bps_each_side
         stamp_bps = self.config.stamp_duty_bps_sell
         if self.config.use_historical_fee_schedule:
-            if trade_date.date() < pd.Timestamp("2022-04-29").date():
-                transfer_bps *= 2.0
-            if trade_date.date() < pd.Timestamp("2023-08-28").date():
-                stamp_bps *= 2.0
+            # Resolve dated rates from the registered conventions; fall back
+            # to the legacy hard-coded breakpoints only if lookup fails.
+            try:
+                schedule = resolve_optional(self.config.market).fee_schedule_for(
+                    trade_date.date()
+                )
+                transfer_bps = schedule.transfer_fee_bps_each_side
+                stamp_bps = schedule.stamp_duty_bps_sell
+            except LookupError:
+                if trade_date.date() < pd.Timestamp("2022-04-29").date():
+                    transfer_bps *= 2.0
+                if trade_date.date() < pd.Timestamp("2023-08-28").date():
+                    stamp_bps *= 2.0
 
         def side_cost(changes: np.ndarray, extra_bps: float) -> float:
             active = changes[changes > 1e-12]
@@ -288,6 +299,8 @@ def _metrics(
         "backtest_start": path.index.min().date().isoformat(),
         "backtest_end": path.index.max().date().isoformat(),
         "portfolio_mode": "long_only",
+        "market": config.market,
+        "conventions_fingerprint": resolve_optional(config.market).fingerprint(),
         "rebalance_schedule": config.rebalance_schedule,
         "execution_lag_sessions": 1,
         "signal_availability": "END_OF_DAY_AFTER_CLOSE",
