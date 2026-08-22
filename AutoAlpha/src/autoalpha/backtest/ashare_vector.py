@@ -226,9 +226,7 @@ class AshareVectorBacktester:
             # Resolve dated rates from the registered conventions; fall back
             # to the legacy hard-coded breakpoints only if lookup fails.
             try:
-                schedule = resolve_optional(self.config.market).fee_schedule_for(
-                    trade_date.date()
-                )
+                schedule = resolve_optional(self.config.market).fee_schedule_for(trade_date.date())
                 transfer_bps = schedule.transfer_fee_bps_each_side
                 stamp_bps = schedule.stamp_duty_bps_sell
             except LookupError:

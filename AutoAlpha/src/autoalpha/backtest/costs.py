@@ -100,13 +100,9 @@ class ChinaAExecutionCosts:
             raise LookupError("historical fee schedule requested but none configured")
         if effective_date is None:
             return _latest_schedule(self.historical_fee_schedules)
-        eligible = [
-            s for s in self.historical_fee_schedules if s.effective_from <= effective_date
-        ]
+        eligible = [s for s in self.historical_fee_schedules if s.effective_from <= effective_date]
         if not eligible:
-            raise LookupError(
-                f"no CN A-share fee schedule effective on or before {effective_date}"
-            )
+            raise LookupError(f"no CN A-share fee schedule effective on or before {effective_date}")
         return max(eligible, key=lambda s: s.effective_from)
 
     @classmethod

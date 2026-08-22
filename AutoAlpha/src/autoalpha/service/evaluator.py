@@ -499,10 +499,7 @@ class PriceVolumeEvaluator:
                 for factor, weight in zip(factors, normalized_weights, strict=True)
             },
             "portfolio_evaluation_protocol": self.config.governance.protocol_version,
-            **{
-                f"portfolio_market_{k}": v
-                for k, v in conventions_identity(None).items()
-            },
+            **{f"portfolio_market_{k}": v for k, v in conventions_identity(None).items()},
             "portfolio_research_evidence_tier": evidence_tier,
             "portfolio_task_production_promotion_allowed": (evidence_tier == "PRIMARY_DISCOVERY"),
             "portfolio_holding_period_days": self.config.portfolio.holding_period_days,

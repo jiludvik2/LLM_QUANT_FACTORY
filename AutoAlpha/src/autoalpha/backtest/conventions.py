@@ -158,9 +158,7 @@ class MarketConventions:
         """
         eligible = [s for s in self.fee_schedules if s.effective_from <= as_of]
         if not eligible:
-            raise LookupError(
-                f"No fee schedule for {self.market} effective on or before {as_of}"
-            )
+            raise LookupError(f"No fee schedule for {self.market} effective on or before {as_of}")
         return max(eligible, key=lambda s: s.effective_from)
 
     def latest_fee_schedule(self) -> FeeSchedule:
