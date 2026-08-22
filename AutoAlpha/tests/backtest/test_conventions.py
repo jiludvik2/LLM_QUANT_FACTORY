@@ -73,6 +73,15 @@ def test_costs_from_conventions_reproduce_legacy_dated_fees() -> None:
     assert sell_now["stamp_duty"] == pytest.approx(100_000 * 5.0 / 10_000)
 
 
+def test_costs_from_conventions_none_resolves_default_market() -> None:
+    costs = ChinaAExecutionCosts.from_conventions(None)
+    assert costs.conventions_market == conv.DEFAULT_MARKET
+    assert costs.use_historical_fee_schedule is True
+    sell_2021 = costs.fee_breakdown("SELL", 100_000.0, date(2021, 6, 1))
+    assert sell_2021["transfer_fee"] == pytest.approx(100_000 * 0.2 / 10_000)
+    assert sell_2021["stamp_duty"] == pytest.approx(100_000 * 10.0 / 10_000)
+
+
 def test_costs_default_path_unchanged() -> None:
     costs = ChinaAExecutionCosts()
     assert costs.conventions_market == "CN_ASHARE"

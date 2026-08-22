@@ -121,9 +121,11 @@ class ChinaAExecutionCosts:
         The latest schedule supplies the headline rates; with
         ``use_historical_fee_schedule`` the rates are resolved per trade date.
         """
-        resolved = resolve_optional(conventions) if isinstance(conventions, str) else conventions
-        if resolved is None:
-            return cls()
+        resolved = (
+            resolve_optional(conventions)
+            if isinstance(conventions, str) or conventions is None
+            else conventions
+        )
         latest = resolved.latest_fee_schedule()
         return cls(
             commission_bps_each_side=latest.commission_bps_each_side,
