@@ -55,6 +55,9 @@ autoalpha-realistic-batch-service = "autoalpha.service.realistic_batch_app:main"
 autocombine-service = "autoalpha.service.autocombine_app:main"
 quantcombine-service = "autoalpha.service.quantcombine_app:main"
 
+[project.optional-dependencies]
+yahoo = ["yfinance>=0.2,<2"]
+
 [dependency-groups]
 dev = [
   "pytest>=9,<10",
