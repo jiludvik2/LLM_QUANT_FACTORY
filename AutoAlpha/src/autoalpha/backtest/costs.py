@@ -4,18 +4,42 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Literal
 
+from autoalpha.backtest.conventions import (
+    DEFAULT_MARKET,
+    FeeSchedule,
+    MarketConventions,
+    resolve_optional,
+)
+
 Side = Literal["BUY", "SELL"]
+
+
+def _latest_schedule(
+    schedules: tuple[FeeSchedule, ...] | None,
+) -> FeeSchedule:
+    if not schedules:
+        raise LookupError("no historical fee schedules available")
+    return max(schedules, key=lambda s: s.effective_from)
 
 
 @dataclass(frozen=True)
 class ChinaAExecutionCosts:
-    """Explicit A-share fees; impact and spread are added by the execution layer later."""
+    """Explicit A-share fees; impact and spread are added by the execution layer later.
+
+    Defaults reproduce the legacy hard-coded values exactly. When constructed via
+    :meth:`from_conventions` the fee rates come from a dated
+    ``MarketConventions`` fee schedule and the conventions identity (market +
+    fingerprint) is carried on the instance so experiment evidence can record it.
+    """
 
     commission_bps_each_side: float = 1.5
     stamp_duty_bps_sell: float = 5.0
     transfer_fee_bps_each_side: float = 0.1
     minimum_commission_cny: float = 5.0
     use_historical_fee_schedule: bool = False
+    conventions_market: str = DEFAULT_MARKET
+    conventions_fingerprint: str = ""
+    historical_fee_schedules: tuple[FeeSchedule, ...] = ()
 
     def __post_init__(self) -> None:
         if any(
@@ -54,7 +78,11 @@ class ChinaAExecutionCosts:
         effective_date = _coerce_date(trade_date)
         transfer_bps = self.transfer_fee_bps_each_side
         stamp_bps = self.stamp_duty_bps_sell
-        if self.use_historical_fee_schedule and effective_date is not None:
+        if self.historical_fee_schedules and self.use_historical_fee_schedule:
+            schedule = self._schedule_for(effective_date)
+            transfer_bps = schedule.transfer_fee_bps_each_side
+            stamp_bps = schedule.stamp_duty_bps_sell
+        elif self.use_historical_fee_schedule and effective_date is not None:
             if effective_date < date(2022, 4, 29):
                 transfer_bps *= 2.0
             if effective_date < date(2023, 8, 28):
@@ -66,6 +94,47 @@ class ChinaAExecutionCosts:
             "transfer_fee": float(transfer),
             "stamp_duty": float(stamp),
         }
+
+    def _schedule_for(self, effective_date: date | None) -> FeeSchedule:
+        if not self.historical_fee_schedules:
+            raise LookupError("historical fee schedule requested but none configured")
+        if effective_date is None:
+            return _latest_schedule(self.historical_fee_schedules)
+        eligible = [s for s in self.historical_fee_schedules if s.effective_from <= effective_date]
+        if not eligible:
+            raise LookupError(f"no CN A-share fee schedule effective on or before {effective_date}")
+        return max(eligible, key=lambda s: s.effective_from)
+
+    @classmethod
+    def from_conventions(
+        cls,
+        conventions: MarketConventions | str | None,
+        *,
+        use_historical_fee_schedule: bool = True,
+    ) -> ChinaAExecutionCosts:
+        """Build costs from a convention set's dated fee schedules.
+
+        The latest schedule supplies the headline rates; with
+        ``use_historical_fee_schedule`` the rates are resolved per trade date.
+        """
+        resolved = (
+            resolve_optional(conventions)
+            if isinstance(conventions, str) or conventions is None
+            else conventions
+        )
+        latest = resolved.latest_fee_schedule()
+        return cls(
+            commission_bps_each_side=latest.commission_bps_each_side,
+            stamp_duty_bps_sell=latest.stamp_duty_bps_sell,
+            transfer_fee_bps_each_side=latest.transfer_fee_bps_each_side,
+            minimum_commission_cny=latest.minimum_commission,
+            use_historical_fee_schedule=use_historical_fee_schedule,
+            conventions_market=resolved.market,
+            conventions_fingerprint=resolved.fingerprint(),
+            historical_fee_schedules=tuple(
+                sorted(resolved.fee_schedules, key=lambda s: s.effective_from)
+            ),
+        )
 
     def affordable_notional(
         self,

@@ -7,12 +7,20 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
+from autoalpha.backtest.conventions import DEFAULT_MARKET, resolve_optional
 from autoalpha.backtest.target_book import rebalance_mask, select_target_positions
 
 RebalanceSchedule = Literal[
     "WEEKLY_FIRST_SESSION", "BIWEEKLY_FIRST_SESSION", "MONTHLY_FIRST_SESSION"
 ]
 ASHARE_PROXY_RETURN_CONVENTION = "EOD_T__OPEN_T1_TO_OPEN_T2_TOTAL_RETURN_PROXY"
+
+# Dataclass defaults for the two fee fields the historical schedule may
+# resolve. Used as sentinels in ``_cost_rate`` to tell "caller left this at
+# its default" apart from "caller supplied an explicit override" so explicit
+# overrides always win over the dated schedule.
+_DEFAULT_STAMP_DUTY_BPS_SELL = 5.0
+_DEFAULT_TRANSFER_FEE_BPS_EACH_SIDE = 0.1
 
 
 @dataclass(frozen=True)
@@ -25,13 +33,14 @@ class AshareVectorConfig:
     maximum_positions: int = 30
     rebalance_schedule: RebalanceSchedule = "WEEKLY_FIRST_SESSION"
     commission_bps_each_side: float = 2.5
-    stamp_duty_bps_sell: float = 5.0
-    transfer_fee_bps_each_side: float = 0.1
+    stamp_duty_bps_sell: float = _DEFAULT_STAMP_DUTY_BPS_SELL
+    transfer_fee_bps_each_side: float = _DEFAULT_TRANSFER_FEE_BPS_EACH_SIDE
     minimum_commission_cny: float = 5.0
     slippage_bps_each_side: float = 5.0
     use_historical_fee_schedule: bool = True
     cost_stress_multiplier: float = 2.0
     trading_days_per_year: int = 245
+    market: str = DEFAULT_MARKET
 
     def __post_init__(self) -> None:
         if self.initial_cash_cny <= 0 or not 0 < self.gross_exposure <= 1:
@@ -220,11 +229,19 @@ class AshareVectorBacktester:
     ) -> float:
         transfer_bps = self.config.transfer_fee_bps_each_side
         stamp_bps = self.config.stamp_duty_bps_sell
-        if self.config.use_historical_fee_schedule:
-            if trade_date.date() < pd.Timestamp("2022-04-29").date():
-                transfer_bps *= 2.0
-            if trade_date.date() < pd.Timestamp("2023-08-28").date():
-                stamp_bps *= 2.0
+        transfer_overridden = transfer_bps != _DEFAULT_TRANSFER_FEE_BPS_EACH_SIDE
+        stamp_overridden = stamp_bps != _DEFAULT_STAMP_DUTY_BPS_SELL
+        needs_schedule = not (transfer_overridden and stamp_overridden)
+        if self.config.use_historical_fee_schedule and needs_schedule:
+            # Only resolve dated rates for fields the caller left at their
+            # dataclass default; explicit overrides always win, and an
+            # unresolvable schedule fails closed instead of silently
+            # falling back to CN A-share's hard-coded breakpoints.
+            schedule = resolve_optional(self.config.market).fee_schedule_for(trade_date.date())
+            if not transfer_overridden:
+                transfer_bps = schedule.transfer_fee_bps_each_side
+            if not stamp_overridden:
+                stamp_bps = schedule.stamp_duty_bps_sell
 
         def side_cost(changes: np.ndarray, extra_bps: float) -> float:
             active = changes[changes > 1e-12]
@@ -288,6 +305,8 @@ def _metrics(
         "backtest_start": path.index.min().date().isoformat(),
         "backtest_end": path.index.max().date().isoformat(),
         "portfolio_mode": "long_only",
+        "market": config.market,
+        "conventions_fingerprint": resolve_optional(config.market).fingerprint(),
         "rebalance_schedule": config.rebalance_schedule,
         "execution_lag_sessions": 1,
         "signal_availability": "END_OF_DAY_AFTER_CLOSE",
