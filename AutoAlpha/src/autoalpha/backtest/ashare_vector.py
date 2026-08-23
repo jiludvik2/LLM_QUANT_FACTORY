@@ -15,6 +15,13 @@ RebalanceSchedule = Literal[
 ]
 ASHARE_PROXY_RETURN_CONVENTION = "EOD_T__OPEN_T1_TO_OPEN_T2_TOTAL_RETURN_PROXY"
 
+# Dataclass defaults for the two fee fields the historical schedule may
+# resolve. Used as sentinels in ``_cost_rate`` to tell "caller left this at
+# its default" apart from "caller supplied an explicit override" so explicit
+# overrides always win over the dated schedule.
+_DEFAULT_STAMP_DUTY_BPS_SELL = 5.0
+_DEFAULT_TRANSFER_FEE_BPS_EACH_SIDE = 0.1
+
 
 @dataclass(frozen=True)
 class AshareVectorConfig:
@@ -26,8 +33,8 @@ class AshareVectorConfig:
     maximum_positions: int = 30
     rebalance_schedule: RebalanceSchedule = "WEEKLY_FIRST_SESSION"
     commission_bps_each_side: float = 2.5
-    stamp_duty_bps_sell: float = 5.0
-    transfer_fee_bps_each_side: float = 0.1
+    stamp_duty_bps_sell: float = _DEFAULT_STAMP_DUTY_BPS_SELL
+    transfer_fee_bps_each_side: float = _DEFAULT_TRANSFER_FEE_BPS_EACH_SIDE
     minimum_commission_cny: float = 5.0
     slippage_bps_each_side: float = 5.0
     use_historical_fee_schedule: bool = True
@@ -222,18 +229,19 @@ class AshareVectorBacktester:
     ) -> float:
         transfer_bps = self.config.transfer_fee_bps_each_side
         stamp_bps = self.config.stamp_duty_bps_sell
-        if self.config.use_historical_fee_schedule:
-            # Resolve dated rates from the registered conventions; fall back
-            # to the legacy hard-coded breakpoints only if lookup fails.
-            try:
-                schedule = resolve_optional(self.config.market).fee_schedule_for(trade_date.date())
+        transfer_overridden = transfer_bps != _DEFAULT_TRANSFER_FEE_BPS_EACH_SIDE
+        stamp_overridden = stamp_bps != _DEFAULT_STAMP_DUTY_BPS_SELL
+        needs_schedule = not (transfer_overridden and stamp_overridden)
+        if self.config.use_historical_fee_schedule and needs_schedule:
+            # Only resolve dated rates for fields the caller left at their
+            # dataclass default; explicit overrides always win, and an
+            # unresolvable schedule fails closed instead of silently
+            # falling back to CN A-share's hard-coded breakpoints.
+            schedule = resolve_optional(self.config.market).fee_schedule_for(trade_date.date())
+            if not transfer_overridden:
                 transfer_bps = schedule.transfer_fee_bps_each_side
+            if not stamp_overridden:
                 stamp_bps = schedule.stamp_duty_bps_sell
-            except LookupError:
-                if trade_date.date() < pd.Timestamp("2022-04-29").date():
-                    transfer_bps *= 2.0
-                if trade_date.date() < pd.Timestamp("2023-08-28").date():
-                    stamp_bps *= 2.0
 
         def side_cost(changes: np.ndarray, extra_bps: float) -> float:
             active = changes[changes > 1e-12]

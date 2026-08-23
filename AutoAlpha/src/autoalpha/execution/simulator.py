@@ -32,7 +32,7 @@ class Order:
     decision_price: float
     style: ExecutionStyle = ExecutionStyle.VWAP
     maximum_participation: float = 0.10
-    lot_size: int = 100
+    lot_size: int | None = None
 
 
 @dataclass(frozen=True)
@@ -85,12 +85,15 @@ class ExecutionSimulator:
     def _effective_lot_size(self, order: Order) -> int:
         """Lot size governing ``order`` under the configured conventions.
 
-        An order left at the legacy default lot follows the conventions input
-        (when provided); an explicitly set order lot is respected verbatim.
+        An order left unset (``lot_size=None``) follows the conventions input
+        (when provided); an explicitly set order lot is respected verbatim,
+        even when it numerically matches the legacy default.
         """
-        if self.conventions is not None and order.lot_size == LEGACY_DEFAULT_ORDER_LOT:
+        if order.lot_size is not None:
+            return order.lot_size
+        if self.conventions is not None:
             return self.conventions.lot_size
-        return order.lot_size
+        return LEGACY_DEFAULT_ORDER_LOT
 
     def execute(
         self,
