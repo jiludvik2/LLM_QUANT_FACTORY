@@ -248,7 +248,7 @@ RESEARCH -> FROZEN -> HIDDEN_HOLDOUT -> SHADOW -> PAPER -> PRODUCTION_CANDIDATE
 | 研究循环、记忆、连续迭代 | `service/worker.py`、`research_manager.py`、`full_llm.py` | `test_worker_memory.py`、`test_research_manager.py`、`test_full_llm.py` |
 | 评价指标与统一口径 | `service/evaluator.py`、`canonical_evaluation.py`、`metric_convention.py` | `test_evaluator_metrics.py`、`test_canonical_evaluation.py`、`test_metric_convention.py` |
 | 因子 DSL 与未来函数防护 | `dsl/`、`data/research_fields.py` | `tests/dsl/`、`tests/data/` |
-| 向量与事件回测对齐 | `backtest/ashare_vector.py`、`backtest/ledger.py`、`backtest/timing.py` | `tests/backtest/` |
+| 向量与事件回测对齐 | `backtest/ashare_vector.py`、`backtest/ledger.py`、`backtest/timing.py`、`backtest/conventions.py` | `tests/backtest/` |
 | 因子库、知识和同质化 | `factor_library.py`、`factor_behavior.py`、`factor_homogeneity.py` | 对应 `test_factor_*.py` |
 | 隐藏盲测与研究协议 | `blind_evaluator.py`、`research_protocol.py`、`governance/holdout.py` | `test_blind_evaluator.py`、`test_research_protocol.py`、`test_holdout.py` |
 | AutoCombine | `autocombine*.py` | `test_autocombine.py` |

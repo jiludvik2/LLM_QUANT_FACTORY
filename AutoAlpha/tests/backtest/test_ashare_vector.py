@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from autoalpha.backtest.ashare_vector import AshareVectorBacktester, AshareVectorConfig
 
@@ -121,3 +122,32 @@ def test_bankruptcy_is_a_terminal_screening_outcome_not_an_engine_error() -> Non
     assert result.metrics["total_return"] <= -0.999999
     terminal = result.path.index.get_loc(pd.Timestamp(result.metrics["bankruptcy_date"]))
     assert (result.path.iloc[terminal + 1 :]["net"] == 0.0).all()
+
+
+def test_explicit_stamp_override_wins_over_dated_schedule() -> None:
+    panels = _panels()
+    base = dict(
+        maximum_positions=1,
+        commission_bps_each_side=0.0,
+        minimum_commission_cny=0.0,
+        slippage_bps_each_side=0.0,
+    )
+    baseline = AshareVectorBacktester(AshareVectorConfig(**base)).run(
+        *panels, start="2024-01-02", end="2024-05-31"
+    )
+    overridden = AshareVectorBacktester(
+        AshareVectorConfig(stamp_duty_bps_sell=99.0, **base)
+    ).run(*panels, start="2024-01-02", end="2024-05-31")
+
+    assert (
+        overridden.metrics["total_transaction_cost_cny"]
+        > baseline.metrics["total_transaction_cost_cny"]
+    )
+
+
+def test_unresolvable_fee_schedule_fails_closed_instead_of_falling_back() -> None:
+    panels = _panels()
+    with pytest.raises(LookupError):
+        AshareVectorBacktester(AshareVectorConfig(maximum_positions=1, market="EU")).run(
+            *panels, start="2024-01-02", end="2024-05-31"
+        )

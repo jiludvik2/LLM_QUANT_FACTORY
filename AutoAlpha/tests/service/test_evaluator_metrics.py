@@ -225,6 +225,8 @@ def test_portfolio_evaluation_separates_alpha_diagnostic_from_ashare_strategy() 
     assert metrics["portfolio_benchmark_mode"] == "ELIGIBLE_UNIVERSE_EQUAL_WEIGHT_PROXY"
     assert "portfolio_active_information_ratio" in metrics
     assert "portfolio_market_beta" in metrics
+    assert metrics["portfolio_market_market"] == "CN_ASHARE"
+    assert len(metrics["portfolio_market_conventions_fingerprint"]) == 64
 
     long_only_all = evaluator._strategy_portfolio_path([factor], (1.0,))
     long_only = long_only_all.loc[long_only_all.index >= pd.Timestamp("2020-01-02")].copy()
